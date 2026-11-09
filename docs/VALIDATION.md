@@ -17,11 +17,11 @@ Prepared 9 November 2026 for `peteroraz/whatsapp-gemini-bot`, based on upstream 
 | Same-volume singleton exclusion | Passed with real OS `flock`; second process exits 75 |
 | Compose/CI YAML | Parsed; mount, one replica and no public host-port assertions passed |
 | Patch whitespace / integrity | Checked during packaging |
-| Real Chromium/UI smoke | **Blocked by workspace OS socket restrictions**, not marked passed |
-| Docker image build and container run | **Not run here**; Docker engine unavailable |
+| Real Chromium/UI smoke | **Passed in GitHub Actions inside the built image**; blocked in the original workspace |
+| Docker image build and container run | **Passed in GitHub Actions**; Docker engine unavailable in the original workspace |
 | Live WhatsApp pairing / real Gemini key / cloud deployment | **Not run**; requires the deployment account and credentials |
 
-The browser launch attempt failed at Chromium's Unix socket creation with `Operation not permitted`. A `scripts/smoke-browser.js` check and CI container/browser steps are included for an environment where Chromium is permitted. The browser/UI check covers QR rendering, authenticated access, safe group-name rendering, responsive width and page locking. The HTTP API and delayed-response page-lock regression are already covered by automated tests here.
+The original workspace browser launch failed at Chromium's Unix socket creation with `Operation not permitted`. GitHub Actions subsequently built the image, validated container startup/health and passed the actual Chromium/operator UI integration check in [workflow run 42685091895](https://github.com/peteroraz/whatsapp-gemini-bot/actions/runs/42685091895). A `scripts/smoke-browser.js` check and CI container/browser steps are included for an environment where Chromium is permitted. The browser/UI check covers QR rendering, authenticated access, safe group-name rendering, responsive width and page locking. The HTTP API and delayed-response page-lock regression are already covered by automated tests here.
 
 The initial GitHub API connection reported read-only repository permission and rejected branch creation with HTTP 403. Subsequent publication uses the authenticated GitHub browser session on `fix/cloud-hosting-readiness`. This table records the original preparation workspace; consult the latest GitHub Actions run for subsequent container/browser validation. No cloud application deployment or live account pairing is implied by publishing the branch.
 
@@ -43,6 +43,10 @@ The initial GitHub API connection reported read-only repository permission and r
 - Rejecting fabricated quotes, unsupported media evidence, empty/blocked/truncated AI responses.
 - Bounded transient retries and the actual installed SDK's request serialization.
 - Keeping the admin page locked when an earlier authenticated response arrives late.
+
+## Repository publication and subsequent CI
+
+All 37 source files were uploaded through the authenticated GitHub browser to `fix/cloud-hosting-readiness`, and [pull request #1](https://github.com/peteroraz/whatsapp-gemini-bot/pull/1) was created. A source-hash comparison confirmed that every uploaded file matched the prepared bytes. The obsolete empty Dockerfile.txt was removed. CI action dependencies were then updated to Node 24 based official releases and the runner pinned to Ubuntu 24.04 to remove deprecated Node 20 action and moving-runner warnings.
 
 ## Release gates on the host
 
