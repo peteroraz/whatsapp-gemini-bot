@@ -1,0 +1,15 @@
+.git
+.github
+node_modules
+.env
+.env.*
+data
+.wwebjs_auth
+.wwebjs_cache
+*.sqlite*
+backups
+coverage
+*.log
+test
+docs
+*.zip

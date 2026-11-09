@@ -1,0 +1,45 @@
+services:
+  bot:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 30s
+    shm_size: 512mb
+    mem_limit: 1536m
+    pids_limit: 512
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    deploy:
+      replicas: 1
+    environment:
+      GEMINI_API_KEY: ${GEMINI_API_KEY:?Set GEMINI_API_KEY}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?Set ADMIN_TOKEN}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      ALLOWED_GROUP_IDS: ${ALLOWED_GROUP_IDS:-}
+      ALLOWED_SENDER_IDS: ${ALLOWED_SENDER_IDS:-}
+      ALLOW_MEMBER_COMMANDS: ${ALLOW_MEMBER_COMMANDS:-false}
+      RECORD_OWN_MESSAGES: ${RECORD_OWN_MESSAGES:-true}
+      MAX_SUMMARY_MESSAGES: ${MAX_SUMMARY_MESSAGES:-200}
+      MAX_INPUT_CHARS: ${MAX_INPUT_CHARS:-60000}
+      MAX_MESSAGE_CHARS: ${MAX_MESSAGE_CHARS:-4000}
+      MAX_PENDING_PER_GROUP: ${MAX_PENDING_PER_GROUP:-5000}
+      RETENTION_DAYS: ${RETENTION_DAYS:-7}
+      SUMMARY_COOLDOWN_SECONDS: ${SUMMARY_COOLDOWN_SECONDS:-60}
+      MAX_CONCURRENT_SUMMARIES: ${MAX_CONCURRENT_SUMMARIES:-2}
+      AI_TIMEOUT_SECONDS: ${AI_TIMEOUT_SECONDS:-90}
+      MAX_RECONNECT_ATTEMPTS: ${MAX_RECONNECT_ATTEMPTS:-10}
+      DATA_DIR: /data
+      PORT: '3000'
+      QR_IN_TERMINAL: 'false'
+    expose:
+      - '3000'
+    volumes:
+      - bot-data:/data
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: '3'
+volumes:
+  bot-data:

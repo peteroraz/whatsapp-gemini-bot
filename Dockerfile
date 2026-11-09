@@ -1,23 +1,30 @@
-FROM node:20-bookworm-slim
+FROM node:24-bookworm-slim
 
-# Install the Chromium browser and its Linux dependencies required by Puppeteer
+ENV NODE_ENV=production \
+    PUPPETEER_SKIP_DOWNLOAD=true \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+    CHROMIUM_NO_SANDBOX=true \
+    DATA_DIR=/data \
+    PORT=3000
+
 RUN apt-get update \
-    && apt-get install -y wget gnupg \
-    && wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add - \
-    && sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google.list' \
-    && apt-get update \
-    && apt-get install -y google-chrome-stable fonts-ipafont-gothic fonts-wqy-zenhei fonts-thai-tlwg fonts-kacst fonts-freefont-ttf libxss1 \
-      --no-install-recommends \
+    && apt-get install -y --no-install-recommends chromium tini util-linux fonts-noto-color-emoji fonts-liberation ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
+COPY package.json package-lock.json .npmrc ./
+RUN npm ci --omit=dev --omit=optional --ignore-scripts --no-audit --no-fund \
+    && npm cache clean --force
+COPY --chown=node:node index.js ./
+COPY --chown=node:node src ./src
+COPY --chown=node:node public ./public
+COPY --chown=node:node scripts ./scripts
+RUN mkdir -p /data && chown node:node /data \
+    && chmod 700 /data && chmod 755 /app/scripts/entrypoint.sh
 
-# Install dependencies
-COPY package*.json ./
-RUN npm install
-
-# Copy application code
-COPY . .
-
-# Start the bot
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD ["node", "scripts/healthcheck.js"]
+ENTRYPOINT ["tini", "-g", "--", "/app/scripts/entrypoint.sh"]
 CMD ["node", "index.js"]
