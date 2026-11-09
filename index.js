@@ -25,39 +25,43 @@ client.on('ready', () => {
 });
 
 client.on('message', async msg => {
-    const chat = await msg.getChat();
-    
-    // Ensure the bot only operates inside groups
-    if (chat.isGroup) {
-        // 1. Passively read and store the chat in the buffer
-        const sender = msg.author || msg.from;
-        chatBuffer.push(`${sender}: ${msg.body}`);
-        
-        // Keep the buffer strictly to the last 200 messages to avoid overloading Gemini
-        if (chatBuffer.length > 200) chatBuffer.shift();
+    try {
+        // 1. Bypass getChat() and check if the chat is a group via the ID suffix
+        if (msg.from.endsWith('@g.us')) {
+            
+            // Passively read and store the chat in the buffer
+            const sender = msg.author || msg.from;
+            chatBuffer.push(`${sender}: ${msg.body}`);
+            
+            // Keep the buffer strictly to the last 200 messages to avoid overloading Gemini
+            if (chatBuffer.length > 200) chatBuffer.shift();
 
-        // 2. Drop its own chat if the trigger phrase is used
-        if (msg.body === '!summarize') {
-            // Acknowledge the command so the group knows it is working
-            await chat.sendMessage('Processing the latest messages, please wait...');
+            // 2. Drop its own chat if the trigger phrase is used
+            if (msg.body === '!summarize') {
+                // Reply directly to the message without fetching the chat object
+                await msg.reply('Processing the latest messages, please wait...');
 
-            try {
-                const prompt = `Extract any action items, financial approvals, and event announcements from this raw chat log:\n\n${chatBuffer.join('\n')}`;
-                
-                const response = await ai.models.generateContent({
-                    model: 'gemini-2.5-flash',
-                    contents: prompt
-                });
+                try {
+                    const prompt = `Extract any action items, financial approvals, and event announcements from this raw chat log:\n\n${chatBuffer.join('\n')}`;
+                    
+                    const response = await ai.models.generateContent({
+                        model: 'gemini-2.5-flash',
+                        contents: prompt
+                    });
 
-                // Reply to the group with the formatted Gemini extraction
-                await chat.sendMessage(response.text);
-                
-                // Clear the buffer after a successful summary
-                chatBuffer = []; 
-            } catch (error) {
-                await chat.sendMessage('An error occurred while contacting Google AI Studio.');
+                    // Send the Gemini extraction back to the group ID
+                    await client.sendMessage(msg.from, response.text);
+                    
+                    // Clear the buffer after a successful summary
+                    chatBuffer = []; 
+                } catch (error) {
+                    console.error('Gemini Error:', error);
+                    await msg.reply('An error occurred while contacting Google AI Studio.');
+                }
             }
         }
+    } catch (error) {
+        console.error('Message handler error:', error);
     }
 });
 
