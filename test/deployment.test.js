@@ -1,0 +1,21 @@
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { spawn, spawnSync } = require('node:child_process');
+const { once } = require('node:events');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+test('container entrypoint excludes another process on the same volume and releases on exit', { skip: process.platform !== 'linux' }, async t => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'digest-lock-'));
+    const script = path.resolve('scripts/entrypoint.sh');
+    const env = { ...process.env, DATA_DIR: dir };
+    const first = spawn('sh', [script, process.execPath, '-e', 'console.log("locked"); setInterval(()=>{},1000)'], { env });
+    t.after(() => { first.kill(); fs.rmSync(dir, { recursive: true, force: true }); });
+    await once(first.stdout, 'data');
+    const second = spawnSync('sh', [script, process.execPath, '-e', 'process.exit(0)'], { env });
+    assert.equal(second.status, 75);
+    const exit = once(first, 'exit'); first.kill(); await exit;
+    const third = spawnSync('sh', [script, process.execPath, '-e', 'process.exit(0)'], { env });
+    assert.equal(third.status, 0);
+});

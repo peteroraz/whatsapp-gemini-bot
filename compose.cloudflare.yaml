@@ -1,0 +1,11 @@
+# Optional Tunnel sidecar: use with compose.yaml; no host ports required.
+services:
+  tunnel:
+    image: cloudflare/cloudflared:2026.10.0
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN:?Set CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      bot:
+        condition: service_healthy

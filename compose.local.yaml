@@ -1,0 +1,5 @@
+# Local Docker testing or SSH tunnel; no public host-port binding.
+services:
+  bot:
+    ports:
+      - '127.0.0.1:3000:3000'
