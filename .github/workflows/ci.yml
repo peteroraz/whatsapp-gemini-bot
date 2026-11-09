@@ -1,0 +1,36 @@
+name: Validate bot
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm audit --omit=dev --omit=optional --audit-level=high
+      - name: Build deployment image
+        run: docker build -t group-digest:ci .
+      - name: Validate container startup and health endpoint
+        run: |
+          docker run -d --name digest-smoke -e GEMINI_API_KEY=not-a-real-key -e ADMIN_TOKEN=01234567890123456789012345678901 group-digest:ci
+          for attempt in $(seq 1 30); do
+            if docker exec digest-smoke node scripts/healthcheck.js; then exit 0; fi
+            sleep 2
+          done
+          docker logs digest-smoke
+          exit 1
+      - name: Check browser and protected UI inside the image
+        run: docker run --rm --entrypoint node group-digest:ci scripts/smoke-browser.js
+      - if: always()
+        run: docker rm -f digest-smoke || true
