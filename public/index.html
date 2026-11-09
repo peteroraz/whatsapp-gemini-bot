@@ -1,0 +1,9 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Group Digest · Control</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<body><main><header><p class="eyebrow">WHATSAPP + GEMINI</p><h1>Group Digest</h1><p>Connect your WhatsApp account and check the bot’s status.</p></header>
+<section id="login"><h2>Operator access</h2><p>Enter the admin token you configured on the server.</p><form id="auth"><label for="token">Admin token</label><input id="token" type="password" required autocomplete="off" minlength="32"><button>Connect</button></form></section>
+<p id="error" role="alert"></p><div id="dashboard" hidden>
+<section><div class="row"><h2>Connection</h2><button id="logout" type="button" class="secondary">Lock page</button></div><p id="connection" role="status"></p><img id="qr" alt="Scan this QR code in WhatsApp Linked Devices" width="300" height="300" hidden><p>In WhatsApp, open <strong>Settings → Linked devices → Link a device</strong>. Pair using the QR code above.</p><p id="scope"></p></section>
+<section><h2>Choose your groups</h2><p>Refresh after pairing, then copy the required IDs into <code>ALLOWED_GROUP_IDS</code> in your hosting settings and redeploy. Only those groups will be recorded.</p><button id="groups" type="button" class="secondary">List WhatsApp groups</button><ul id="group-list"></ul></section>
+<section><h2>Message queues</h2><pre id="queues"></pre><p>Use <code>!summarize</code> from the linked WhatsApp account, or from an operator listed in <code>ALLOWED_SENDER_IDS</code>. A failed delivery resumes on your next request.</p></section>
+</div><footer>Text extraction only. Check source quotes before acting on AI summaries. Tell participating groups that messages are processed by Gemini.</footer></main></body></html>
