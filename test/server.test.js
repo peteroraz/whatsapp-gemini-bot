@@ -10,6 +10,31 @@ test('configuration fails closed and validates secret, group and numeric setting
     for (const override of [{ ADMIN_TOKEN: 'short' }, { GEMINI_API_KEY: '' }, { ALLOWED_GROUP_IDS: '*' }, { RETENTION_DAYS: 'abc' }, { ALLOW_MEMBER_COMMANDS: 'yes' }]) assert.throws(() => loadConfig({ ...env, ...override }));
     assert.equal(loadConfig({ ...env, ALLOWED_GROUP_IDS: '123-456@g.us,789@g.us' }).groups.size, 2);
 });
+test('group directory coalesces requests, invalidates after reconnect and returns safe errors', async t => {
+    const config = loadConfig({ GEMINI_API_KEY: 'test', ADMIN_TOKEN: 'x'.repeat(32) });
+    const store = new Store(':memory:');
+    let calls = 0, release;
+    const session = { state: { connection: 'ready', readyAt: 'first' },
+        groups: () => { calls++; return new Promise(resolve => { release = resolve; }); } };
+    const logs = [];
+    const server = createServer({ config, store, session, bot: { active: new Map() }, log: (...args) => logs.push(args) });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); store.close(); });
+    const url = `http://127.0.0.1:${server.address().port}/api/groups`, headers = { Authorization: `Bearer ${config.adminToken}` };
+    const requests = [fetch(url, { headers }), fetch(url, { headers })];
+    while (!release) await new Promise(resolve => setImmediate(resolve));
+    release([{ id: '123@g.us', name: 'Team' }]);
+    for (const request of requests) assert.equal((await request).status, 200);
+    assert.equal(calls, 1);
+    session.state.readyAt = 'second';
+    session.groups = async () => { throw new Error('TIMEOUT'); };
+    const timeout = await fetch(url, { headers });
+    assert.equal(timeout.status, 503); assert.equal((await timeout.json()).error, 'group_list_timeout');
+    session.groups = async () => { throw new Error('secret chat content'); };
+    const failed = await fetch(url, { headers });
+    assert.equal((await failed.json()).error, 'group_list_failed');
+    assert(!JSON.stringify(logs).includes('secret chat content'));
+});
 test('HTTP admin requires bearer token, hides QR and secrets, separates liveness and readiness', async t => {
     const config = loadConfig({ GEMINI_API_KEY: 'private-api-key', ADMIN_TOKEN: 'secret-admin-token'.repeat(3) });
     const store = new Store(':memory:');

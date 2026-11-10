@@ -4,6 +4,22 @@ function deadline(promise, ms) {
     return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('TIMEOUT')), ms); })])
         .finally(() => clearTimeout(timer));
 }
+// Run inside the linked WhatsApp browser. getChats() serializes every chat and
+// refreshes group metadata/last messages; listing names and IDs needs none of it.
+function readGroupDirectory() {
+    const collection = window.require('WAWebCollections').Chat;
+    if (typeof collection?.getModelsArray !== 'function') throw new Error('GROUP_DIRECTORY_UNAVAILABLE');
+    const groups = new Map();
+    for (const chat of collection.getModelsArray()) {
+        try {
+            const id = chat?.id?._serialized;
+            if (typeof id !== 'string' || !/^\d+(?:-\d+)?@g\.us$/.test(id)) continue;
+            const name = chat.name || chat.formattedTitle;
+            groups.set(id, { id, name: typeof name === 'string' && name.trim() ? name : 'Unnamed group' });
+        } catch { /* A malformed chat must not hide all other groups. */ }
+    }
+    return [...groups.values()];
+}
 class Session {
     constructor({ factory, config, onMessage, log, fatal, schedule = setTimeout, cancel = clearTimeout }) {
         Object.assign(this, { factory, config, onMessage, log, fatal, schedule, cancel });
@@ -80,8 +96,10 @@ class Session {
     }
     async groups() {
         if (this.state.connection !== 'ready' || !this.client) throw new Error('WHATSAPP_NOT_READY');
-        const chats = await deadline(this.client.getChats(), 15000);
-        return chats.filter(chat => chat.isGroup).map(chat => ({ id: chat.id._serialized, name: chat.name }));
+        const client = this.client;
+        const groups = await deadline(client.pupPage.evaluate(readGroupDirectory), 15000);
+        if (this.client !== client || this.state.connection !== 'ready') throw new Error('WHATSAPP_NOT_READY');
+        return groups.sort((a, b) => a.name.localeCompare(b.name));
     }
     async stop() {
         this.stopping = true;
@@ -92,4 +110,4 @@ class Session {
         if (client) await deadline(client.destroy(), 15000).catch(() => {});
     }
 }
-module.exports = { Session, deadline };
+module.exports = { Session, deadline, readGroupDirectory };

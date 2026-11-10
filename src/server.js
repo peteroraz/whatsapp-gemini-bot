@@ -9,7 +9,7 @@ function authorized(header, token) {
     return supplied.length === expected.length && timingSafeEqual(supplied, expected) && header.startsWith('Bearer ');
 }
 function createServer({ config, session, store, bot, log = () => {} }) {
-    let attempts = 0, windowStart = Date.now(), groupCache = null, groupCacheAt = 0;
+    let attempts = 0, windowStart = Date.now(), groupCache = null, groupCacheAt = 0, groupRequest = null, groupSession = null;
     const assets = new Map([
         ['/', ['index.html', 'text/html; charset=utf-8']],
         ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
@@ -56,10 +56,28 @@ function createServer({ config, session, store, bot, log = () => {} }) {
             }
             if (url.pathname === '/api/groups') {
                 if (session.state.connection !== 'ready') return respond(503, { error: 'whatsapp_not_ready' });
-                if (!groupCache || Date.now() - groupCacheAt > 30000) {
-                    groupCache = await session.groups(); groupCacheAt = Date.now();
+                if (groupSession !== session.state.readyAt) {
+                    groupCache = null; groupRequest = null; groupSession = session.state.readyAt;
                 }
-                return respond(200, { groups: groupCache });
+                try {
+                    if (!groupCache || Date.now() - groupCacheAt > 30000) {
+                        if (!groupRequest) {
+                            const request = Promise.resolve().then(() => session.groups());
+                            groupRequest = request;
+                            request.finally(() => { if (groupRequest === request) groupRequest = null; }).catch(() => {});
+                        }
+                        const request = groupRequest, readyAt = session.state.readyAt;
+                        const groups = await request;
+                        if (session.state.connection !== 'ready' || session.state.readyAt !== readyAt) return respond(503, { error: 'whatsapp_not_ready' });
+                        groupCache = groups; groupCacheAt = Date.now();
+                    }
+                    return respond(200, { groups: groupCache });
+                } catch (error) {
+                    const code = error.message === 'TIMEOUT' ? 'group_list_timeout'
+                        : error.message === 'WHATSAPP_NOT_READY' ? 'whatsapp_not_ready' : 'group_list_failed';
+                    log('group_list_failed', { code });
+                    return respond(503, { error: code });
+                }
             }
             return respond(404, { error: 'not_found' });
         } catch { log('admin_request_failed'); if (!res.headersSent) respond(503, { error: 'temporarily_unavailable' }); else res.end(); }
