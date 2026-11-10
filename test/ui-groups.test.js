@@ -56,3 +56,13 @@ test('locking during group lookup prevents late group names from being displayed
     assert.equal(h.nodes.get('group-list').children.length, 0);
     assert.equal(h.nodes.get('group-status').textContent, '');
 });
+test('connection instructions explain QR availability and block group lookup until ready', async () => {
+    let connection = 'reconnecting';
+    const h = harness(async () => ({ ok: true, status: 200, json: async () => ({ connection, allowedGroups: [], pending: [], activeSummaries: 0 }) }));
+    await vm.runInContext('refresh()', h.context);
+    assert(h.nodes.get('groups').disabled); assert.match(h.nodes.get('pairing-help').textContent, /restore/);
+    connection = 'awaiting_qr'; await vm.runInContext('refresh()', h.context);
+    assert.equal(h.nodes.get('reconnect').textContent, 'Refresh pairing QR');
+    connection = 'ready'; await vm.runInContext('refresh()', h.context);
+    assert.equal(h.nodes.get('groups').disabled, false); assert.match(h.nodes.get('pairing-help').textContent, /No QR is needed/);
+});

@@ -64,3 +64,20 @@ test('HTTP admin requires bearer token, hides QR and secrets, separates liveness
     assert.equal((await fetch(base + '/missing')).status, 404);
     bot.stopping = true; assert.equal((await fetch(base + '/healthz')).status, 503);
 });
+test('reconnect requires bearer authentication, refuses active summaries and rate limits restarts', async t => {
+    const config = loadConfig({ GEMINI_API_KEY: 'test', ADMIN_TOKEN: 'x'.repeat(32) });
+    const store = new Store(':memory:'); let restarts = 0;
+    const session = { state: { connection: 'ready' }, reconnect: async () => { restarts++; } };
+    const bot = { active: new Map() };
+    const server = createServer({ config, store, session, bot });
+    await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+    t.after(async () => { server.closeAllConnections(); await new Promise(resolve => server.close(resolve)); store.close(); });
+    const url = `http://127.0.0.1:${server.address().port}/api/reconnect`, headers = { Authorization: `Bearer ${config.adminToken}` };
+    assert.equal((await fetch(url, { method: 'POST' })).status, 401); assert.equal(restarts, 0);
+    bot.active.set('123@g.us', true);
+    assert.equal((await fetch(url, { method: 'POST', headers })).status, 409); assert.equal(restarts, 0);
+    bot.active.clear();
+    assert.equal((await fetch(url, { method: 'POST', headers })).status, 202); assert.equal(restarts, 1);
+    assert.equal((await fetch(url, { method: 'POST', headers })).status, 429); assert.equal(restarts, 1);
+    assert.equal((await fetch(url, { headers })).status, 404);
+});
