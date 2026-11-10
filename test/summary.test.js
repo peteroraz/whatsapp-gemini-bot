@@ -13,11 +13,37 @@ test('accepts supported source quotes and rejects fabricated evidence', () => {
 test('media captions cannot be used as approval evidence', () => {
     assert.throws(() => validate(JSON.stringify(good), [{ ...messages[0], kind: 'media' }]));
 });
-test('format includes scope, source, caution and all coverage limitations', () => {
+test('digest hides technical identifiers, uses local dates and discloses coverage limits', () => {
     const job = { id: 'abcdefgh1234', snapshot: { messages: [...messages, { ...messages[0], ref: 'm2', kind: 'media', truncated: true }], omitted: 3 } };
     const text = format(good, job).join('\n');
-    for (const expected of ['123@lid', '2026-11-09', 'not payment authorisation', '3 older messages', 'not interpreted', 'shortened']) assert(text.includes(expected));
+    for (const expected of ['9 Nov 2026', '1:00 pm WAT', '*Action items*', '3 older messages', 'not interpreted', 'shortened']) assert(text.includes(expected));
+    for (const hidden of ['123@lid', 'abcdefgh', '[m1]', 'T12:00:00', 'Scope:', 'Source:']) assert(!text.includes(hidden));
     assert(text.startsWith(BOT_PREFIX));
+});
+test('optional source quotes stay readable without sender addresses or internal refs', () => {
+    const data = { items: [{ category: 'approval', text: '123@lid approved the budget.', sources: [{ ref: 'm1', quote: '123@lid approved the budget.' }] }] };
+    const text = format(data, { id: 'internal-job-id', snapshot: { messages, omitted: 0 } }, { includeSources: true }).join('\n');
+    assert(text.includes('Source: “a group member approved the budget.”'));
+    assert(text.includes('*Approvals mentioned*')); assert(text.includes('Confirm approval mentions'));
+    for (const hidden of ['123@lid', 'internal-job-id', '[m1]']) assert(!text.includes(hidden));
+});
+test('digest dates honor the configured timezone including midnight and multi-day ranges', () => {
+    const job = { id: 'hidden', snapshot: { messages: [{ ...messages[0], timestamp: '2026-11-10T23:30:00Z' }], omitted: 0 } };
+    const local = format({ items: [] }, job).join('\n');
+    assert(local.includes('11 Nov 2026')); assert(local.includes('12:30 am WAT'));
+    const utc = format({ items: [] }, job, { timeZone: 'UTC' }).join('\n');
+    assert(utc.includes('10 Nov 2026')); assert(utc.includes('11:30 pm'));
+    job.snapshot.messages.push({ ...messages[0], timestamp: '2026-11-12T00:00:00Z' });
+    const range = format({ items: [] }, job).join('\n');
+    assert(range.includes('11 Nov 2026')); assert(range.includes('12 Nov 2026'));
+});
+test('long digests have readable part numbers and no job IDs', () => {
+    const job = { id: 'private-job-123', snapshot: { messages, omitted: 0 } };
+    const parts = format({ items: Array.from({ length: 12 }, () => ({ ...good.items[0], text: 'Meeting details '.repeat(50) })) }, job);
+    assert(parts.length > 1);
+    assert(parts[0].includes(`_Part 1 of ${parts.length}_`));
+    assert(parts.at(-1).includes(`_Part ${parts.length} of ${parts.length}_`));
+    assert(parts.every(part => !part.includes(job.id) && Array.from(part).length <= 2900));
 });
 test('splits long unicode output without destroying surrogate pairs', () => {
     const source = ('😀 hello\n').repeat(2000);

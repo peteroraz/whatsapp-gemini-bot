@@ -7,7 +7,8 @@ const { createServer } = require('../src/server');
 test('configuration fails closed and validates secret, group and numeric settings', () => {
     const env = { GEMINI_API_KEY: 'test', ADMIN_TOKEN: 'x'.repeat(32) };
     assert.equal(loadConfig(env).groups.size, 0);
-    for (const override of [{ ADMIN_TOKEN: 'short' }, { GEMINI_API_KEY: '' }, { ALLOWED_GROUP_IDS: '*' }, { RETENTION_DAYS: 'abc' }, { ALLOW_MEMBER_COMMANDS: 'yes' }]) assert.throws(() => loadConfig({ ...env, ...override }));
+    for (const override of [{ ADMIN_TOKEN: 'short' }, { GEMINI_API_KEY: '' }, { ALLOWED_GROUP_IDS: '*' }, { RETENTION_DAYS: 'abc' }, { ALLOW_MEMBER_COMMANDS: 'yes' }, { TIME_ZONE: 'not/a/timezone' }, { DIGEST_INCLUDE_SOURCES: 'yes' }]) assert.throws(() => loadConfig({ ...env, ...override }));
+    assert.equal(loadConfig(env).timeZone, 'Africa/Lagos'); assert.equal(loadConfig(env).digestSources, false);
     assert.equal(loadConfig({ ...env, ALLOWED_GROUP_IDS: '123-456@g.us,789@g.us' }).groups.size, 2);
 });
 test('group directory coalesces requests, invalidates after reconnect and returns safe errors', async t => {

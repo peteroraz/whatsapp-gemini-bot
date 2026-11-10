@@ -1,5 +1,5 @@
 'use strict';
-const { BOT_PREFIX, format } = require('./summary');
+const { BOT_PREFIX, isBotMessage, format } = require('./summary');
 const { createHash } = require('node:crypto');
 const groupPattern = /^\d+(?:-\d+)?@g\.us$/;
 function wid(value) {
@@ -60,7 +60,7 @@ class Bot {
             this.progress(groupId, 'message_rejected', { lastError: message.reason }); return;
         }
         const { fromMe, body, id, author } = message;
-        if (fromMe && body.startsWith(BOT_PREFIX)) return;
+        if (fromMe && isBotMessage(body)) return;
         const command = body.trim().toLowerCase();
         if (command === '!summarize' || command === '!help') {
             if (!this.store.markSeen(id, groupId)) { metrics.duplicates++; return; }
@@ -110,13 +110,13 @@ class Bot {
         let phase = 'delivery';
         try {
             this.progress(groupId, 'preparing', { lastError: null });
-            await this.notice(groupId, job.chunks ? `Resuming summary ${job.id.slice(0, 8)}.` : 'Preparing a summary of the pending messages…');
+            await this.notice(groupId, job.chunks ? 'Resuming your saved digest…' : 'Preparing your group digest…');
             if (!job.chunks) {
                 phase = 'generation';
                 this.progress(groupId, 'generating');
                 const data = job.snapshot.messages.some(message => message.kind === 'text')
                     ? await this.summarize(job.snapshot.messages) : { items: [] };
-                this.store.saveChunks(groupId, format(data, job));
+                this.store.saveChunks(groupId, format(data, job, { timeZone: this.config.timeZone, includeSources: this.config.digestSources }));
                 job = this.store.getJob(groupId);
             }
             phase = 'delivery';

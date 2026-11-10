@@ -75,6 +75,13 @@ test('linked-account commands work and bot output cannot feed back', async t => 
     await h.bot.handle(h.message('self@c.us', '!summarize', { fromMe: true, to: A }), 'self@c.us');
     assert.equal(h.calls.length, 1); assert.equal(h.calls[0].length, 1);
 });
+test('current and legacy branded bot output stay excluded when own messages are recorded', async t => {
+    const h = harness(t);
+    for (const prefix of [BOT_PREFIX, '🤖 Group Digest\n']) {
+        await h.bot.handle(h.message('self@c.us', prefix + 'Saved digest', { fromMe: true, to: A }));
+    }
+    assert.equal(h.store.count(A), 0);
+});
 test('deduplicates message replay even after successful summary', async t => {
     const h = harness(t), message = h.message(A, 'Only once');
     await h.bot.handle(message); await h.bot.handle(message);
@@ -97,7 +104,7 @@ test('AI failures preserve snapshot and respect cooldown', async t => {
 test('failed output resumes from persisted chunk without recharging Gemini', async t => {
     const h = harness(t); let fail = true;
     h.bot.send = async (to, text) => {
-        if (text.includes('Scope:') && fail) throw new Error('Transport failure');
+        if (text.includes('AI-generated') && fail) throw new Error('Transport failure');
         h.sent.push({ to, text });
     };
     await h.bot.handle(h.message(A, 'Keep until delivered'));
@@ -106,6 +113,7 @@ test('failed output resumes from persisted chunk without recharging Gemini', asy
     assert.equal(h.store.count(A), 1);
     fail = false; h.advance(); await h.bot.handle(h.message(A, '!summarize'));
     assert.equal(h.calls.length, 1); assert.equal(h.store.count(A), 0);
+    assert(!h.sent.some(message => /Resuming summary [a-f0-9]/.test(message.text)));
 });
 test('a batch processes oldest messages and preserves the remaining backlog', async t => {
     const h = harness(t, { maxMessages: 2 });
