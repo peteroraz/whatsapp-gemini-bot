@@ -4,6 +4,20 @@ function deadline(promise, ms) {
     return Promise.race([promise, new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('TIMEOUT')), ms); })])
         .finally(() => clearTimeout(timer));
 }
+// Recent WhatsApp builds removed MsgKey._serialized. The installed client still
+// uses it to find a message after sending. Restore that alias from WhatsApp's
+// own canonical serializer, without replacing a native implementation.
+function installMessageKeyCompatibility() {
+    const Key = window.require('WAWebMsgKey');
+    if (typeof Key !== 'function' || typeof Key.prototype?.toString !== 'function' ||
+        Key.prototype.toString === Object.prototype.toString) throw new Error('MESSAGE_KEY_UNSUPPORTED');
+    if ('_serialized' in Key.prototype) return;
+    Object.defineProperty(Key.prototype, '_serialized', { configurable: true, get() {
+        const value = this.toString();
+        if (typeof value !== 'string' || !value || value === '[object Object]') throw new Error('MESSAGE_KEY_UNSUPPORTED');
+        return value;
+    } });
+}
 // Run inside the linked WhatsApp browser. getChats() serializes every chat and
 // refreshes group metadata/last messages; listing names and IDs needs none of it.
 function readGroupDirectory() {
@@ -113,7 +127,13 @@ class Session {
         if (this.state.connection !== 'ready' || !this.client) throw new Error('WHATSAPP_NOT_READY');
         const client = this.client;
         try {
-            return await deadline(client.sendMessage(groupId, text, { linkPreview: false, sendSeen: false }), 30000);
+            await deadline(client.pupPage.evaluate(installMessageKeyCompatibility), 10000);
+            if (this.client !== client || this.state.connection !== 'ready') throw new Error('WHATSAPP_NOT_READY');
+            const receipt = await deadline(client.sendMessage(groupId, text, { linkPreview: false, sendSeen: false, waitUntilMsgSent: true }), 30000);
+            // An undefined send result is not proof that WhatsApp accepted it.
+            const id = receipt?.id;
+            if (!(typeof id?._serialized === 'string' && id._serialized) && !(typeof id?.id === 'string' && id.id)) throw new Error('DELIVERY_UNCONFIRMED');
+            return receipt;
         } catch (error) {
             // A timed-out send may still finish. Reset the browser before another operator retry.
             if (this.client === client) this.retry('send_failed'); throw error;
@@ -135,4 +155,4 @@ class Session {
         if (client) await deadline(client.destroy(), 15000).catch(() => {});
     }
 }
-module.exports = { Session, deadline, readGroupDirectory };
+module.exports = { Session, deadline, readGroupDirectory, installMessageKeyCompatibility };

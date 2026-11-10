@@ -66,3 +66,12 @@ test('connection instructions explain QR availability and block group lookup unt
     connection = 'ready'; await vm.runInContext('refresh()', h.context);
     assert.equal(h.nodes.get('groups').disabled, false); assert.match(h.nodes.get('pairing-help').textContent, /No QR is needed/);
 });
+test('processing activity distinguishes connection from ingestion and is cleared on lock', async () => {
+    const h = harness(async () => ({ ok: true, status: 200, json: async () => ({ connection: 'ready', allowedGroups: ['123@g.us'],
+        pending: [], activeSummaries: 0, processing: [{ groupId: '123@g.us', received: 4, stored: 2, commands: 1, rejected: 1,
+            stage: 'message_rejected', lastError: 'missing_message_id', lastCommand: '!summarize', lastCommandAt: '2026-11-10T22:00:00Z' }] }) }));
+    await vm.runInContext('refresh()', h.context);
+    assert.match(h.nodes.get('processing').textContent, /Received: 4 · Stored: 2 · Commands: 1 · Rejected: 1/);
+    assert.match(h.nodes.get('processing').textContent, /Issue: missing message id/);
+    h.nodes.get('logout').listeners.click(); assert.equal(h.nodes.get('processing').textContent, '');
+});
