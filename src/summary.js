@@ -10,10 +10,12 @@ Empty items is valid if nothing qualifies. Financial approval mentions are unver
 At most 30 items, text at most 600 characters and each quote at most 240 characters. Do not include markdown code fences.`;
 const schema = {
     type: 'object', additionalProperties: false, required: ['items'], properties: {
-        items: { type: 'array', maxItems: 30, items: { type: 'object', additionalProperties: false,
+        // Nested array bounds exceed the configured model's schema complexity
+        // limit (HTTP 400). Enforce counts below, after generation, instead.
+        items: { type: 'array', items: { type: 'object', additionalProperties: false,
             required: ['category', 'text', 'sources'], properties: {
                 category: { type: 'string', enum: ['action', 'approval', 'event'] }, text: { type: 'string' },
-                sources: { type: 'array', minItems: 1, maxItems: 3, items: { type: 'object', additionalProperties: false,
+                sources: { type: 'array', items: { type: 'object', additionalProperties: false,
                     required: ['ref', 'quote'], properties: { ref: { type: 'string' }, quote: { type: 'string' } } } },
             } } },
     },
@@ -78,7 +80,8 @@ function createSummarizer(ai, config, options = {}) {
             try {
                 const response = await ai.models.generateContent({ model: config.model, contents: JSON.stringify(messages), config: {
                     systemInstruction: SYSTEM, responseMimeType: 'application/json', responseJsonSchema: schema,
-                    temperature: 0.1, maxOutputTokens: 4096,
+                    // Keep model defaults; determinism comes from schema and validation.
+                    maxOutputTokens: 4096,
                     abortSignal: AbortSignal.timeout(config.timeoutMs),
                     httpOptions: { timeout: config.timeoutMs, retryOptions: { attempts: 1 } },
                 } });

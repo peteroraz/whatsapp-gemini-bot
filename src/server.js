@@ -58,6 +58,7 @@ function createServer({ config, session, store, bot, log = () => {} }) {
                 qrAvailable: Boolean(session.state.qr) && Date.now() - session.state.qrAt < 60000,
                 model: config.model, allowedGroups: [...config.groups], commandSenders: [...config.senders],
                 memberCommands: config.allowMemberCommands, pending: store.status(), activeSummaries: bot.active.size,
+                processing: bot.diagnostics?.() || [],
             });
             if (url.pathname === '/api/qr') {
                 if (!session.state.qr || Date.now() - session.state.qrAt >= 60000) return respond(404, { error: 'no_current_qr' });
