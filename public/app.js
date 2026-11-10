@@ -29,6 +29,7 @@ function lock() {
     el('group-list').replaceChildren(); el('queues').textContent = ''; el('connection').textContent = ''; el('scope').textContent = '';
     el('group-status').textContent = ''; el('groups').disabled = false; el('groups').textContent = 'List WhatsApp groups';
     el('pairing-help').textContent = ''; el('recovery-status').textContent = ''; el('reconnect').disabled = false;
+    el('processing').textContent = '';
 }
 async function refresh() {
     const current = epoch;
@@ -49,6 +50,9 @@ async function refresh() {
         if (!el('groups').textContent.includes('Loading')) el('groups').disabled = status.connection !== 'ready';
         el('scope').textContent = `${status.allowedGroups.length} enabled groups · Model: ${status.model} · ${status.activeSummaries} summaries running`;
         el('queues').textContent = status.pending.length ? status.pending.map(g => `${g.groupId}\n${g.pending} pending${g.unfinishedSummary ? ' · saved summary awaiting completion' : ''}${g.omitted ? ` · ${g.omitted} omitted by limits` : ''}`).join('\n\n') : 'No pending recorded messages.';
+        el('processing').textContent = (status.processing || []).map(g =>
+            `${g.groupId}\nReceived: ${g.received} · Stored: ${g.stored} · Commands: ${g.commands} · Rejected: ${g.rejected}\nStage: ${g.stage.replaceAll('_', ' ')}${g.lastCommandAt ? `\nLast command: ${g.lastCommand} at ${g.lastCommandAt}` : ''}${g.lastError ? `\nIssue: ${g.lastError.replaceAll('_', ' ')}` : ''}`
+        ).join('\n\n') || 'Enable a group to see its message processing activity.';
         if (status.qrAvailable) {
             const blob = await (await api('/api/qr', current)).blob();
             if (current !== epoch) return;
