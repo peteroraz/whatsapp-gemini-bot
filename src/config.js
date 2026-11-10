@@ -18,6 +18,8 @@ function loadConfig(env = process.env) {
     if (groups.size > 100 || [...groups].some(id => !/^\d+(?:-\d+)?@g\.us$/.test(id))) throw new Error('Use at most 100 exact group IDs in ALLOWED_GROUP_IDS');
     const senders = list(env.ALLOWED_SENDER_IDS);
     if ([...senders].some(id => !/^\d+@(c\.us|lid)$/.test(id))) throw new Error('Use exact WhatsApp IDs in ALLOWED_SENDER_IDS');
+    const timeZone = env.TIME_ZONE?.trim() || 'Africa/Lagos';
+    try { new Intl.DateTimeFormat('en-NG', { timeZone }).format(); } catch { throw new Error('Invalid TIME_ZONE'); }
     return {
         apiKey: env.GEMINI_API_KEY.trim(), adminToken: env.ADMIN_TOKEN,
         model: env.GEMINI_MODEL?.trim() || 'gemini-3.5-flash-lite',
@@ -25,6 +27,7 @@ function loadConfig(env = process.env) {
         port: integer(env, 'PORT', 3000, 1, 65535), host: env.HOST || '0.0.0.0', groups, senders,
         allowMemberCommands: boolean(env, 'ALLOW_MEMBER_COMMANDS', false),
         recordOwnMessages: boolean(env, 'RECORD_OWN_MESSAGES', true),
+        timeZone, digestSources: boolean(env, 'DIGEST_INCLUDE_SOURCES', false),
         terminalQr: boolean(env, 'QR_IN_TERMINAL', false),
         noSandbox: boolean(env, 'CHROMIUM_NO_SANDBOX', false),
         executablePath: env.PUPPETEER_EXECUTABLE_PATH || undefined,
