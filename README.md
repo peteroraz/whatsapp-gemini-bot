@@ -76,6 +76,8 @@ For several phone numbers in version one, deploy a separate Coolify application 
 
 ## Commands and collection scope
 
+Digests use WhatsApp bold headings, concise action/event/approval sections, local dates and readable part numbers. Technical message IDs, sender addresses and job IDs stay out of generated digest metadata. `TIME_ZONE` defaults to `Africa/Lagos`; set a valid IANA timezone for your audience. Short source quotes are optional with `DIGEST_INCLUDE_SOURCES=true`; exact source-quote validation always runs, including when quotes are hidden. Explicit identifiers supplied as ordinary conversation content are not universally removed. Existing saved outbox chunks retain their original presentation until delivered.
+
 The dashboard's **Message processing** section shows received/stored messages, received commands, rejection reasons and the current summary stage for each enabled group since startup. A `ready` connection alone does not prove ingestion or delivery. Message identities accept current WhatsApp MsgKeys without `_serialized`; deterministic IDs preserve replay deduplication. Before sending, a compatibility adapter restores the missing MsgKey alias using WhatsApp's own canonical serializer. Send results must include a message identifier before the outbox advances.
 
 `npm run check:gemini` tests the actual structured extraction request and validates source quotes using synthetic text. A plain greeting prompt cannot detect schema incompatibilities. Nested array counts are enforced by application validation rather than provider schema bounds, which the configured model rejected with HTTP 400.
@@ -95,7 +97,7 @@ Messages are retained for seven days and capped at 5,000 pending messages per gr
 
 Before contacting Gemini, the selected snapshot is saved. Generated output is saved before sending; each successful chunk is acknowledged separately. Retrying `!summarize` resumes the saved job. Retries after a restart are **operator-triggered**, not automatic mass resends. Successfully delivered snapshots are removed; messages arriving later remain queued.
 
-There is an unavoidable ambiguity if WhatsApp accepts a send and the process dies before SQLite records its acknowledgement. A retry may duplicate that one chunk. Summary ID and part numbers identify duplicates. This is **at-least-once recovery, not exactly-once WhatsApp delivery**. Gemini generation can also be repeated if interrupted before its response was saved.
+There is an unavoidable ambiguity if WhatsApp accepts a send and the process dies before SQLite records its acknowledgement. A retry may duplicate that one chunk. Job IDs remain internal in storage/logs; multipart digests show readable part numbers. This is **at-least-once recovery, not exactly-once WhatsApp delivery**. Gemini generation can also be repeated if interrupted before its response was saved.
 
 An unfinished summary retains its snapshot beyond normal message retention until completed or explicitly purged. To remove a group's stored data, stop the bot and run the documented purge command. Disk deletion is logical deletion, not secure erasure of SSDs/backups.
 
