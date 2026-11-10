@@ -14,7 +14,7 @@ test('locking the admin page cannot be undone by a delayed authenticated respons
     const context = vm.createContext({ document, window: { addEventListener() {} },
         fetch: () => new Promise(resolve => { release = resolve; }),
         URL: { revokeObjectURL() {}, createObjectURL() { return 'blob:mock'; } },
-        setTimeout() { return 1; }, clearTimeout() {} });
+        AbortSignal, setTimeout() { return 1; }, clearTimeout() {} });
     vm.runInContext(fs.readFileSync('public/app.js', 'utf8'), context);
     document.getElementById('token').value = 'operator-token';
     nodes.get('auth').listeners.submit({ preventDefault() {} });
