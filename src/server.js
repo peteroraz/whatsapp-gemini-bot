@@ -10,6 +10,7 @@ function authorized(header, token) {
 }
 function createServer({ config, session, store, bot, log = () => {} }) {
     let attempts = 0, windowStart = Date.now(), groupCache = null, groupCacheAt = 0, groupRequest = null, groupSession = null;
+    let lastReconnectAt = 0;
     const assets = new Map([
         ['/', ['index.html', 'text/html; charset=utf-8']],
         ['/app.js', ['app.js', 'text/javascript; charset=utf-8']],
@@ -26,7 +27,8 @@ function createServer({ config, session, store, bot, log = () => {} }) {
         };
         try {
             const url = new URL(req.url, 'http://localhost');
-            if (req.method !== 'GET') return respond(405, { error: 'method_not_allowed' });
+            const reconnect = req.method === 'POST' && url.pathname === '/api/reconnect';
+            if (req.method !== 'GET' && !reconnect) return respond(405, { error: 'method_not_allowed' });
             if (url.pathname === '/healthz') {
                 store.ping(); return respond(bot.stopping ? 503 : 200, { alive: !bot.stopping });
             }
@@ -43,8 +45,16 @@ function createServer({ config, session, store, bot, log = () => {} }) {
                 attempts++;
                 return respond(attempts > 30 ? 429 : 401, { error: attempts > 30 ? 'too_many_attempts' : 'unauthorized' });
             }
+            if (reconnect) {
+                req.resume();
+                if (bot.active.size) return respond(409, { error: 'summary_in_progress' });
+                if (Date.now() - lastReconnectAt < 30000) return respond(429, { error: 'reconnect_cooldown' });
+                lastReconnectAt = Date.now(); groupCache = null; groupRequest = null;
+                try { await session.reconnect(); return respond(202, { reconnecting: true }); }
+                catch { log('operator_reconnect_failed'); return respond(503, { error: 'reconnect_failed' }); }
+            }
             if (url.pathname === '/api/status') return respond(200, {
-                connection: session.state.connection, readyAt: session.state.readyAt,
+                connection: session.state.connection, readyAt: session.state.readyAt, lastReason: session.state.lastReason,
                 qrAvailable: Boolean(session.state.qr) && Date.now() - session.state.qrAt < 60000,
                 model: config.model, allowedGroups: [...config.groups], commandSenders: [...config.senders],
                 memberCommands: config.allowMemberCommands, pending: store.status(), activeSummaries: bot.active.size,

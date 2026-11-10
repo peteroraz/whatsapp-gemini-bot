@@ -25,6 +25,7 @@ async function main() {
         await page.waitForFunction(() => document.querySelector('#qr').naturalWidth > 0);
         assert((await page.$eval('#connection', element => element.textContent)).includes('awaiting qr'));
         session.state.connection = 'ready';
+        await page.waitForFunction(() => !document.querySelector('#groups').disabled);
         await page.click('#groups'); await page.waitForSelector('#group-list li');
         assert((await page.$eval('#group-list', element => element.textContent)).includes('<img'));
         assert.equal(await page.evaluate(() => Boolean(window.injected)), false);

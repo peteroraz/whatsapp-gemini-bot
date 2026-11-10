@@ -68,6 +68,12 @@ docker compose -f compose.yaml -f compose.local.yaml up -d --build
 
 The Docker stack binds the local override to `127.0.0.1` only. The container's data directory is always `/data`, regardless of local `.env`'s `DATA_DIR`.
 
+## Pairing and recovery
+
+This deployment links **one WhatsApp account**. QR codes rotate automatically while pairing is pending; no QR is shown for an already paired, connected account. **Refresh pairing QR** restarts an unpaired browser to obtain a fresh code. **Reconnect WhatsApp** restarts the browser using the saved pairing without logging out or deleting the profile. Groups can be listed only when Connection says **ready**. If a reconnect fails, inspect the runtime logs and restart the application in Coolify without removing `/data`.
+
+For several phone numbers in version one, deploy a separate Coolify application for each number, with its own domain, admin token, persistent volume, and allowed group IDs. Never share `/data` or the browser profile between numbers. Adding another number is a separate deployment, not another QR scan into this instance. To replace an account, use a fresh instance/volume; retain the original volume for recovery rather than deleting it. Provision server capacity for the additional browsers before expanding.
+
 ## Commands and collection scope
 
 - `!summarize` extracts the **oldest pending batch** (up to 200 messages / 60,000 JSON characters by default). Repeat after the cooldown to process the next batch.

@@ -55,3 +55,46 @@ test('initialization failure schedules bounded recovery without leaking error co
     await session.connect(); assert(fn); await fn(); assert(fatal);
     assert(!JSON.stringify(logs).includes('secret credentials')); await session.stop();
 });
+function recoveryHarness() {
+    const clients = [], scheduled = new Map(); let next = 0;
+    const session = new Session({ config: { reconnectMax: 10 }, log() {}, onMessage() {}, fatal() {},
+        schedule: fn => { scheduled.set(++next, fn); return next; }, cancel: id => scheduled.delete(id),
+        factory: () => { const client = new EventEmitter(); client.initialize = async () => {};
+            client.destroy = async () => { client.destroyed = true; }; client.getState = async () => 'CONNECTED';
+            clients.push(client); return client; } });
+    return { session, clients, scheduled };
+}
+test('ready cancels a queued reconnect and repeated QR events replace the old code', async () => {
+    const h = recoveryHarness(); await h.session.connect();
+    h.clients[0].emit('qr', 'first'); h.clients[0].emit('qr', 'second');
+    assert.equal(h.session.state.qr, 'second');
+    h.session.retry('connection_check_failed'); assert.equal(h.scheduled.size, 1);
+    h.clients[0].emit('ready'); assert.equal(h.scheduled.size, 0); assert.equal(h.session.state.connection, 'ready');
+    await h.session.stop();
+});
+test('one failed heartbeat does not restart; two consecutive failures trigger recovery', async () => {
+    const h = recoveryHarness(); await h.session.connect(); h.clients[0].emit('ready');
+    h.clients[0].getState = async () => { throw new Error('private provider error'); };
+    await h.session.check(); assert.equal(h.session.state.connection, 'ready');
+    await h.session.check(); assert.equal(h.session.state.connection, 'reconnecting');
+    await h.session.stop();
+});
+test('a late heartbeat from the previous browser cannot reconnect the replacement', async () => {
+    const h = recoveryHarness(); await h.session.connect(); h.clients[0].emit('ready');
+    let reject; h.clients[0].getState = () => new Promise((_, fail) => { reject = fail; });
+    const check = h.session.check(); await h.session.reconnect(); h.clients[1].emit('ready');
+    reject(new Error('stale timeout')); await check;
+    assert.equal(h.session.state.connection, 'ready'); assert.equal(h.scheduled.size, 0);
+    await h.session.stop();
+});
+test('manual reconnect replaces a pending initialization without waiting five minutes or logging out', async () => {
+    const h = recoveryHarness(); let reject;
+    const factory = h.session.factory;
+    h.session.factory = () => { const client = factory(); if (h.clients.length === 1) client.initialize = () => new Promise((_, fail) => { reject = fail; });
+        client.logout = () => { throw new Error('Must preserve pairing'); }; return client; };
+    const original = h.session.connect();
+    await h.session.reconnect(); assert(h.clients[0].destroyed); assert.equal(h.clients.length, 2);
+    h.clients[1].emit('ready'); reject(new Error('old initialization failed')); await original;
+    assert.equal(h.session.state.connection, 'ready'); assert.equal(h.scheduled.size, 0);
+    await h.session.stop();
+});
