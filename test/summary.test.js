@@ -61,5 +61,14 @@ test('installed Gemini SDK serializes the schema and honors the custom HTTP tran
     assert.deepEqual(await summarize(messages), good);
     assert(captured.url.includes('mock-model:generateContent'));
     assert(captured.body.generationConfig.responseJsonSchema);
+    const schemaText = JSON.stringify(captured.body.generationConfig.responseJsonSchema);
+    assert(!schemaText.includes('minItems')); assert(!schemaText.includes('maxItems'));
+    for (const option of ['temperature', 'topP', 'topK']) assert.equal(captured.body.generationConfig[option], undefined);
     assert(captured.body.systemInstruction.parts[0].text.includes('untrusted'));
+});
+test('application validation enforces array bounds outside the provider schema', () => {
+    assert.throws(() => validate(JSON.stringify({ items: Array(31).fill(good.items[0]) }), messages));
+    for (const sources of [[], Array(4).fill(good.items[0].sources[0])]) {
+        assert.throws(() => validate(JSON.stringify({ items: [{ ...good.items[0], sources }] }), messages));
+    }
 });

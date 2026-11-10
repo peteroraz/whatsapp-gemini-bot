@@ -2,7 +2,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { Session, readGroupDirectory } = require('../src/session');
+const { Session, readGroupDirectory, installMessageKeyCompatibility } = require('../src/session');
 const vm = require('node:vm');
 test('session handles QR, own-account message events, reconnect and shutdown', async () => {
     const clients = [], timers = [], messages = []; let fatal = false;
@@ -11,14 +11,15 @@ test('session handles QR, own-account message events, reconnect and shutdown', a
         schedule: (fn, ms) => { timers.push({ fn, ms }); return timers.length; }, cancel() {},
         factory: () => {
             const client = new EventEmitter(); client.initialize = async () => {};
+            client.pupPage = { evaluate: async () => {} };
             client.destroy = async () => { client.destroyed = true; }; client.getState = async () => 'CONNECTED';
-            client.sendMessage = async () => 'sent'; clients.push(client); return client;
+            client.sendMessage = async () => ({ id: { id: 'sent' } }); clients.push(client); return client;
         } });
     await session.connect(); clients[0].emit('qr', 'private-qr'); assert.equal(session.state.connection, 'awaiting_qr');
     clients[0].emit('authenticated'); assert.equal(session.state.qr, null);
     clients[0].emit('ready'); assert.equal(session.state.connection, 'ready');
     clients[0].emit('message_create', { fromMe: true }); await Promise.resolve(); assert.equal(messages.length, 1);
-    assert.equal(await session.send('123@g.us', 'hello'), 'sent'); await session.check();
+    assert.equal((await session.send('123@g.us', 'hello')).id.id, 'sent'); await session.check();
     clients[0].emit('disconnected', 'reason'); assert.equal(session.state.connection, 'reconnecting'); assert.equal(timers.length, 1);
     clients[0].emit('disconnected', 'duplicate'); assert.equal(timers.length, 1);
     await timers[0].fn(); assert(clients[0].destroyed); assert.equal(clients.length, 2);
@@ -60,6 +61,7 @@ function recoveryHarness() {
     const session = new Session({ config: { reconnectMax: 10 }, log() {}, onMessage() {}, fatal() {},
         schedule: fn => { scheduled.set(++next, fn); return next; }, cancel: id => scheduled.delete(id),
         factory: () => { const client = new EventEmitter(); client.initialize = async () => {};
+            client.pupPage = { evaluate: async () => {} };
             client.destroy = async () => { client.destroyed = true; }; client.getState = async () => 'CONNECTED';
             clients.push(client); return client; } });
     return { session, clients, scheduled };
@@ -97,4 +99,39 @@ test('manual reconnect replaces a pending initialization without waiting five mi
     h.clients[1].emit('ready'); reject(new Error('old initialization failed')); await original;
     assert.equal(h.session.state.connection, 'ready'); assert.equal(h.scheduled.size, 0);
     await h.session.stop();
+});
+test('an undefined send receipt cannot be treated as acknowledged WhatsApp delivery', async () => {
+    const h = recoveryHarness(); await h.session.connect(); h.clients[0].emit('ready');
+    h.clients[0].sendMessage = async () => undefined;
+    await assert.rejects(h.session.send('123@g.us', 'Test'), /DELIVERY_UNCONFIRMED/);
+    assert.equal(h.session.state.connection, 'reconnecting');
+    assert.equal(h.scheduled.size, 1); await h.session.stop();
+});
+test('message key compatibility restores canonical lookup, preserves native serializers and rejects unknown keys', () => {
+    const context = vm.createContext({ install: installMessageKeyCompatibility.toString() });
+    const result = vm.runInContext(`(() => {
+        class Key { constructor(id) { this.id = id; } toString() { return 'true_123@g.us_' + this.id; } }
+        let Current = Key;
+        const window = { require: name => { if (name !== 'WAWebMsgKey') throw Error('unexpected module'); return Current; } };
+        const apply = eval('(' + install + ')');
+        const key = new Key('wire-id'), messages = new Map([[key.toString(), { accepted: true }]]);
+        apply(); apply();
+        const restored = messages.get(key._serialized).accepted;
+        class Native extends Key { get _serialized() { return 'native'; } }
+        Current = Native; apply(); const preserved = new Native('id')._serialized;
+        Current = class Unknown {};
+        let refused = false; try { apply(); } catch (error) { refused = error.message === 'MESSAGE_KEY_UNSUPPORTED'; }
+        return { restored, preserved, refused };
+    })()`, context);
+    assert.deepEqual(JSON.parse(JSON.stringify(result)), { restored: true, preserved: 'native', refused: true });
+});
+test('session replacement during send preparation cannot send through the obsolete browser', async () => {
+    const h = recoveryHarness(); await h.session.connect(); h.clients[0].emit('ready');
+    let release, sent = false;
+    h.clients[0].pupPage.evaluate = () => new Promise(resolve => { release = resolve; });
+    h.clients[0].sendMessage = async () => { sent = true; };
+    const result = h.session.send('123@g.us', 'Test');
+    await h.session.reconnect(); h.clients[1].emit('ready'); release();
+    await assert.rejects(result, /WHATSAPP_NOT_READY/); assert.equal(sent, false);
+    assert.equal(h.session.state.connection, 'ready'); await h.session.stop();
 });
