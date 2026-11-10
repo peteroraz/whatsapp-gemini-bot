@@ -76,6 +76,10 @@ For several phone numbers in version one, deploy a separate Coolify application 
 
 ## Commands and collection scope
 
+The dashboard's **Message processing** section shows received/stored messages, received commands, rejection reasons and the current summary stage for each enabled group since startup. A `ready` connection alone does not prove ingestion or delivery. Message identities accept current WhatsApp MsgKeys without `_serialized`; deterministic IDs preserve replay deduplication. Before sending, a compatibility adapter restores the missing MsgKey alias using WhatsApp's own canonical serializer. Send results must include a message identifier before the outbox advances.
+
+`npm run check:gemini` tests the actual structured extraction request and validates source quotes using synthetic text. A plain greeting prompt cannot detect schema incompatibilities. Nested array counts are enforced by application validation rather than provider schema bounds, which the configured model rejected with HTTP 400.
+
 - `!summarize` extracts the **oldest pending batch** (up to 200 messages / 60,000 JSON characters by default). Repeat after the cooldown to process the next batch.
 - `!help` describes command usage. Leading/trailing spaces and command case are ignored.
 - Commands are accepted from the linked account and configured operators. `ALLOW_MEMBER_COMMANDS=true` explicitly permits every member of enabled groups to request summaries.
